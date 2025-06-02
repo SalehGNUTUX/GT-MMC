@@ -1,0 +1,132 @@
+#!/bin/bash
+
+# GT-MMC v1- GNU Tux Multimedia Converter
+LANGUAGE=""
+ERROR_FILE="$HOME/.gtmmc_errors.log"
+
+function select_language() {
+  if command -v zenity &>/dev/null; then
+    choice=$(zenity --list --radiolist --title "Language / اللغة" \
+      --column "" --column "Language / اللغة" \
+      TRUE "English" FALSE "العربية")
+  elif command -v kdialog &>/dev/null; then
+    choice=$(kdialog --radiolist "Select language / اختر اللغة" \
+      English "English" on العربية "Arabic" off)
+  else
+    echo "❌ zenity أو kdialog مطلوب."
+    exit 1
+  fi
+
+  [[ "$choice" == "العربية" ]] && LANGUAGE="ar" || LANGUAGE="en"
+}
+
+function t() {
+  case "$1" in
+    welcome) [[ $LANGUAGE == ar ]] && echo "🎛 مرحبًا بك في GT-MMC محول الوسائط" || echo "🎛 Welcome to GT-MMC Media Converter" ;;
+    choose_type) [[ $LANGUAGE == ar ]] && echo "📀 اختر نوع التحويل:" || echo "📀 Choose conversion type:" ;;
+    type_video) [[ $LANGUAGE == ar ]] && echo "تحويل فيديو" || echo "Video Conversion" ;;
+    type_audio) [[ $LANGUAGE == ar ]] && echo "تحويل صوت" || echo "Audio Conversion" ;;
+    type_image) [[ $LANGUAGE == ar ]] && echo "تحويل صورة" || echo "Image Conversion" ;;
+    type_extract_audio) [[ $LANGUAGE == ar ]] && echo "استخراج صوت من فيديو" || echo "Extract Audio from Video" ;;
+    quit) [[ $LANGUAGE == ar ]] && echo "❌ خروج" || echo "❌ Exit" ;;
+    choose_format) [[ $LANGUAGE == ar ]] && echo "🎯 اختر الصيغة المستهدفة:" || echo "🎯 Choose output format:" ;;
+    choose_files) [[ $LANGUAGE == ar ]] && echo "📂 اختر الملفات:" || echo "📂 Select files to convert:" ;;
+    choose_folder) [[ $LANGUAGE == ar ]] && echo "📁 اختر مجلد الحفظ:" || echo "📁 Choose output folder:" ;;
+    converting) [[ $LANGUAGE == ar ]] && echo "🔄 جاري التحويل..." || echo "🔄 Converting..." ;;
+    done) [[ $LANGUAGE == ar ]] && echo "✅ تم التحويل!" || echo "✅ Conversion complete!" ;;
+    error) [[ $LANGUAGE == ar ]] && echo "❌ حدث خطأ. تم حفظه في:" || echo "❌ Error occurred. Saved to:" ;;
+    error_file) echo "$ERROR_FILE" ;;
+  esac
+}
+
+# بداية البرنامج
+select_language
+echo "$(t welcome)"
+
+FORMATS_VIDEO=(mp4 mkv avi mov webm)
+FORMATS_AUDIO=(mp3 wav ogg aac flac m4a opus)
+FORMATS_IMAGE=(png jpg bmp webp gif)
+
+while true; do
+  echo
+  echo "$(t choose_type)"
+  echo "1) $(t type_video)"
+  echo "2) $(t type_audio)"
+  echo "3) $(t type_image)"
+  echo "4) $(t type_extract_audio)"
+  echo "0) $(t quit)"
+  read -p "> " type_choice
+
+  case "$type_choice" in
+    1) mode="video"; formats=("${FORMATS_VIDEO[@]}");;
+    2) mode="audio"; formats=("${FORMATS_AUDIO[@]}");;
+    3) mode="image"; formats=("${FORMATS_IMAGE[@]}");;
+    4) mode="extract_audio"; formats=("${FORMATS_AUDIO[@]}");;
+    0) echo "$(t quit) 👋"; exit 0 ;;
+    *) echo "❌ Invalid choice"; continue ;;
+  esac
+
+  echo
+  echo "$(t choose_format)"
+  for i in "${!formats[@]}"; do
+    printf "%2d) %s\n" $((i+1)) "${formats[$i]}"
+  done
+  read -p "> " fchoice
+  format="${formats[$((fchoice - 1))]}"
+
+  # اختيار الملفات
+  if command -v zenity &>/dev/null; then
+    input_files=$(zenity --file-selection --multiple --separator="|" --title "$(t choose_files)")
+  elif command -v kdialog &>/dev/null; then
+    input_files=$(kdialog --getopenfilename . --multiple --separate-output)
+  fi
+
+  IFS='|' read -r -a input_array <<< "$input_files"
+  [[ ${#input_array[@]} -eq 0 ]] && echo "❌ No files selected." && continue
+
+  # اختيار مجلد الحفظ
+  if command -v zenity &>/dev/null; then
+    output_folder=$(zenity --file-selection --directory --title "$(t choose_folder)")
+  elif command -v kdialog &>/dev/null; then
+    output_folder=$(kdialog --getexistingdirectory .)
+  fi
+  [[ -z "$output_folder" ]] && echo "❌ No folder selected." && continue
+
+  # تنفيذ التحويل
+  total=${#input_array[@]}
+  count=0
+  > "$ERROR_FILE"
+
+  (
+  for input_file in "${input_array[@]}"; do
+    count=$((count + 1))
+    base=$(basename "$input_file")
+    name="${base%.*}"
+    out="$output_folder/$name.$format"
+
+    ffmpeg -y -i "$input_file" "$out" &> /tmp/gtmmc_last.log
+
+    if [[ $? -ne 0 ]]; then
+      echo "File: $input_file" >> "$ERROR_FILE"
+      cat /tmp/gtmmc_last.log >> "$ERROR_FILE"
+      echo "" >> "$ERROR_FILE"
+    fi
+
+    progress=$((count * 100 / total))
+    echo "# $(t converting): $name"
+    echo $progress
+  done
+  ) | zenity --progress --title="$(t converting)" --percentage=0 --auto-close
+
+  # إشعار بالنهاية
+  if [[ -s "$ERROR_FILE" ]]; then
+    notify-send "GT-MMC ❌" "$(t error) $(t error_file)"
+    echo "$(t error) $(t error_file)"
+  else
+    notify-send "GT-MMC ✅" "$(t done)"
+    echo "$(t done)"
+  fi
+
+  echo
+  echo "🔁 $( [[ $LANGUAGE == ar ]] && echo "العودة للقائمة الرئيسية..." || echo "Returning to main menu..." )"
+done
