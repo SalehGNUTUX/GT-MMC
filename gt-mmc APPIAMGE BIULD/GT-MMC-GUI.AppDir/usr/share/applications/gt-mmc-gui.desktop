@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=GT-MMC GUI
+Comment=GNU Multimedia Converter (GUI Version)
+Exec=gt-mmc-gui
+Icon=gt-mmc-gui
+Terminal=false
+Type=Application
+Categories=AudioVideo;Utility;

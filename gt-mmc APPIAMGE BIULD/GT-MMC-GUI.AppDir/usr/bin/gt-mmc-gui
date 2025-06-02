@@ -1,0 +1,126 @@
+#!/bin/bash
+
+# GT-MMC-GUI - GNU Media Converter & Downloader
+# Graphical version using Zenity
+# Author: gnutux
+# License: GPLv3
+
+set -e
+
+# إعداد اللغة (اكتشاف أو افتراضية)
+LANG_FILE="$HOME/.config/gmd-lang"
+DEFAULT_LANG="$(locale | grep LANG= | cut -d= -f2 | cut -d_ -f1)"
+LANGUAGE=${DEFAULT_LANG:-en}
+[ -f "$LANG_FILE" ] && LANGUAGE=$(cat "$LANG_FILE")
+
+# ترجمات
+translate() {
+  case "$1" in
+    "menu_title") [[ $LANGUAGE == ar ]] && echo "اختر عملية" || echo "Choose an action";;
+    "download_video") [[ $LANGUAGE == ar ]] && echo "تنزيل فيديو/صوت" || echo "Download Video/Audio";;
+    "convert_file") [[ $LANGUAGE == ar ]] && echo "تحويل ملف وسائط" || echo "Convert Media File";;
+    "change_lang") [[ $LANGUAGE == ar ]] && echo "تغيير اللغة" || echo "Change Language";;
+    "exit") [[ $LANGUAGE == ar ]] && echo "خروج" || echo "Exit";;
+    "select_files") [[ $LANGUAGE == ar ]] && echo "اختر ملفات الوسائط للتحويل" || echo "Select media files to convert";;
+    "select_output") [[ $LANGUAGE == ar ]] && echo "اختر مكان الحفظ" || echo "Choose output directory";;
+    "choose_format") [[ $LANGUAGE == ar ]] && echo "اختر التنسيق المطلوب" || echo "Choose output format";;
+    "choose_dl_format") [[ $LANGUAGE == ar ]] && echo "اختر صيغة التنزيل" || echo "Choose download format";;
+    "enter_url") [[ $LANGUAGE == ar ]] && echo "أدخل رابط الفيديو أو الصوت" || echo "Enter video/audio URL";;
+    "choose_type") [[ $LANGUAGE == ar ]] && echo "اختر نوع التنزيل" || echo "Choose download type";;
+    "progress") [[ $LANGUAGE == ar ]] && echo "جارٍ التحويل..." || echo "Processing...";;
+    "downloading") [[ $LANGUAGE == ar ]] && echo "جارٍ التنزيل..." || echo "Downloading...";;
+    "done") [[ $LANGUAGE == ar ]] && echo "تمت العملية بنجاح." || echo "Operation completed successfully.";;
+    "error") [[ $LANGUAGE == ar ]] && echo "حدث خطأ. راجع سجل الأخطاء في المنزل." || echo "An error occurred. Check the error log in your home folder.";;
+    "lang_set") [[ $LANGUAGE == ar ]] && echo "تم تغيير اللغة." || echo "Language changed.";;
+    *) echo "$1";;
+  esac
+}
+
+# اختيار اللغة
+change_language() {
+  CHOICE=$(zenity --list --radiolist \
+    --title="GT-MMC-GUI" \
+    --text="Select Language / اختر اللغة" \
+    --column="" --column="Language" \
+    TRUE "English" FALSE "العربية")
+  case "$CHOICE" in
+    "English") echo en > "$LANG_FILE";;
+    "العربية") echo ar > "$LANG_FILE";;
+  esac
+  zenity --info --text="$(translate lang_set)"
+}
+
+# تحويل ملفات وسائط
+convert_files() {
+  FILES=$(zenity --file-selection --multiple --title="$(translate select_files)" --separator="|") || return
+  OUTDIR=$(zenity --file-selection --directory --title="$(translate select_output)") || return
+  FORMAT=$(zenity --entry --title="GT-MMC-GUI" --text="$(translate choose_format) (e.g. mp3, mp4, ogg, mkv)") || return
+
+  (
+    IFS="|"
+    for FILE in $FILES; do
+      BASENAME=$(basename "$FILE")
+      OUTPUT="$OUTDIR/${BASENAME%.*}.$FORMAT"
+      ffmpeg -i "$FILE" "$OUTPUT" 2>> "$HOME/gmd-errors.log"
+    done
+  ) | zenity --progress --pulsate --no-cancel --auto-close --title="GT-MMC-GUI" --text="$(translate progress)"
+
+  if [ $? -eq 0 ]; then
+    zenity --info --text="$(translate done)"
+  else
+    zenity --error --text="$(translate error)"
+  fi
+}
+
+# تنزيل فيديو أو صوت
+download_media() {
+  URL=$(zenity --entry --title="GT-MMC-GUI" --text="$(translate enter_url)") || return
+  TYPE=$(zenity --list --radiolist \
+    --title="GT-MMC-GUI" \
+    --text="$(translate choose_type)" \
+    --column="" --column="Type" \
+    TRUE "Video" FALSE "Audio") || return
+
+  FORMAT=$(zenity --entry --title="GT-MMC-GUI" --text="$(translate choose_dl_format) (e.g. mp4, mp3, webm)") || return
+  OUTDIR=$(zenity --file-selection --directory --title="$(translate select_output)") || return
+
+  OPTIONS=""
+  if [[ $TYPE == "Audio" ]]; then
+    OPTIONS="-f bestaudio --extract-audio --audio-format $FORMAT"
+  else
+    OPTIONS="-f bestvideo[ext=$FORMAT]+bestaudio/best[ext=$FORMAT]"
+  fi
+
+  (
+    yt-dlp $OPTIONS -o "$OUTDIR/%(title)s.%(ext)s" "$URL" 2>> "$HOME/gmd-errors.log"
+  ) | zenity --progress --pulsate --no-cancel --auto-close --title="GT-MMC-GUI" --text="$(translate downloading)"
+
+  if [ $? -eq 0 ]; then
+    zenity --info --text="$(translate done)"
+  else
+    zenity --error --text="$(translate error)"
+  fi
+}
+
+# القائمة الرئيسية
+main_menu() {
+  while true; do
+    CHOICE=$(zenity --list --title="GT-MMC-GUI - GNU Media Converter & Downloader" \
+      --text="$(translate menu_title)" \
+      --column="Option" --width=400 --height=300 \
+      "$(translate download_video)" \
+      "$(translate convert_file)" \
+      "$(translate change_lang)" \
+      "$(translate exit)") || exit
+
+    case "$CHOICE" in
+      "$(translate download_video)") download_media ;;
+      "$(translate convert_file)") convert_files ;;
+      "$(translate change_lang)") change_language ;;
+      "$(translate exit)") exit ;;
+    esac
+  done
+}
+
+# تشغيل البرنامج
+main_menu

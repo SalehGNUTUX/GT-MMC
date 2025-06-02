@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=GT-MMC
+Comment=GNUTUX Multimedia Converter (Terminal Edition)
+Exec=gt-mmc
+Icon=gt-mmc
+Terminal=true
+Type=Application
+Categories=AudioVideo;Utility;

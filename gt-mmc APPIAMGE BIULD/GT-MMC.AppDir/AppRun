@@ -1,0 +1,30 @@
+#!/bin/bash
+
+# تحديد مجلد AppDir (جذر التطبيق)
+APPDIR="$(dirname "$(readlink -f "$0")")"
+EXEC="$APPDIR/usr/bin/gt-mmc"
+
+# قائمة بالطرفيات الممكنة
+TERMINALS=(
+    "gnome-terminal -- bash -c"
+    "xfce4-terminal -e"
+    "konsole -e"
+    "xterm -e"
+    "lxterminal -e"
+    "tilix -e"
+    "mate-terminal -e"
+    "terminator -x"
+)
+
+# المحاولة مع كل طرفية حتى تنجح واحدة
+for term in "${TERMINALS[@]}"; do
+    CMD=$(echo "$term" | awk '{print $1}')
+    if command -v "$CMD" &> /dev/null; then
+        eval "$term \"$EXEC\""
+        exit $?
+    fi
+done
+
+# إذا لم توجد أي طرفية مدعومة
+zenity --error --title="GT-MMC" --text="تعذّر العثور على طرفية لبدء التطبيق. يرجى تشغيله من الطرفية يدويًا."
+exit 1
